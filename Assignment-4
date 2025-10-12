@@ -1,0 +1,63 @@
+import java.sql.*;
+import java.util.Scanner;
+
+public class SimplePagination {
+    public static void main(String[] args) {
+    	System.out.println("GOKUL RAM R");
+    	System.out.println("2117240070090");
+        String jdbcURL = "jdbc:sqlite:pagination_demo.db";
+
+        try (Connection conn = DriverManager.getConnection(jdbcURL)) {
+            System.out.println("Connected to SQLite database.");
+
+            // Create table if not exists
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE IF NOT EXISTS employees (id INTEGER, name TEXT, salary INTEGER)");
+            }
+
+            // Insert sample data (only if empty)
+            try (Statement stmt = conn.createStatement()) {
+                ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM employees");
+                if (rs.next() && rs.getInt(1) == 0) {
+                    stmt.execute("DELETE FROM employees");
+                    stmt.execute("INSERT INTO employees VALUES " +
+                            "(1, 'Ram', 25000), (2, 'Lakshmi', 30000), (3, 'Arun', 28000), " +
+                            "(4, 'Kavi', 32000), (5, 'Priya', 27000), (6, 'Suresh', 35000), " +
+                            "(7, 'Anu', 26000), (8, 'Karthik', 40000), (9, 'Vishnu', 33000), (10, 'Bala', 31000)");
+                }
+            }
+
+            Scanner sc = new Scanner(System.in);
+            System.out.print("Enter page number (starting from 1): ");
+            int page = sc.nextInt();
+
+            System.out.print("Enter page size (records per page): ");
+            int pageSize = sc.nextInt();
+
+            System.out.print("Enter sorting column (id/name/salary): ");
+            String sortColumn = sc.next();
+
+            System.out.print("Enter order (asc/desc): ");
+            String order = sc.next();
+
+            int offset = (page - 1) * pageSize;
+            String query = "SELECT * FROM employees ORDER BY " + sortColumn + " " + order +
+                           " LIMIT ? OFFSET ?";
+
+            PreparedStatement ps = conn.prepareStatement(query);
+            ps.setInt(1, pageSize);
+            ps.setInt(2, offset);
+            ResultSet rs = ps.executeQuery();
+
+            System.out.println("\nPage " + page + " Results (sorted by " + sortColumn + " " + order + "):");
+            while (rs.next()) {
+                System.out.println(rs.getInt("id") + " | " + rs.getString("name") + " | " + rs.getInt("salary"));
+            }
+
+            sc.close();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
