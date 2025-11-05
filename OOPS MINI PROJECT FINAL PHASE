@@ -1,0 +1,656 @@
+-- schema.sql
+CREATE DATABASE IF NOT EXISTS medicaldb;
+USE medicaldb;
+
+CREATE TABLE IF NOT EXISTS patients (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  age INT,
+  gender VARCHAR(10),
+  phone VARCHAR(30),
+  email VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS medical_records (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  patient_id INT NOT NULL,
+  visit_date DATE,
+  diagnosis TEXT,
+  treatment TEXT,
+  doctor VARCHAR(100),
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+);
+
+package model;
+
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
+public class Patient implements Serializable {
+    private int id;
+    private String name;
+    private int age;
+    private String gender;
+    private String phone;
+    private String email;
+    private LocalDateTime createdAt;
+
+    public Patient() {}
+
+    public Patient(int id, String name, int age, String gender, String phone, String email) {
+        this.id = id;
+        this.name = name;
+        this.age = age;
+        this.gender = gender;
+        this.phone = phone;
+        this.email = email;
+    }
+
+    public Patient(String name, int age, String gender, String phone, String email) {
+        this(0, name, age, gender, phone, email);
+    }
+
+    // getters and setters
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public int getAge() { return age; }
+    public void setAge(int age) { this.age = age; }
+
+    public String getGender() { return gender; }
+    public void setGender(String gender) { this.gender = gender; }
+
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    @Override
+    public String toString() {
+        return id + " | " + name + " | Age: " + age + " | " + gender + " | " + phone + " | " + email;
+    }
+}
+
+package model;
+
+import java.io.Serializable;
+import java.time.LocalDate;
+
+public class MedicalRecord implements Serializable {
+    private int id;
+    private int patientId;
+    private LocalDate visitDate;
+    private String diagnosis;
+    private String treatment;
+    private String doctor;
+    private String notes;
+
+    public MedicalRecord() {}
+
+    public MedicalRecord(int id, int patientId, LocalDate visitDate, String diagnosis, String treatment, String doctor, String notes) {
+        this.id = id;
+        this.patientId = patientId;
+        this.visitDate = visitDate;
+        this.diagnosis = diagnosis;
+        this.treatment = treatment;
+        this.doctor = doctor;
+        this.notes = notes;
+    }
+
+    public MedicalRecord(int patientId, LocalDate visitDate, String diagnosis, String treatment, String doctor, String notes) {
+        this(0, patientId, visitDate, diagnosis, treatment, doctor, notes);
+    }
+
+    // getters & setters
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+
+    public int getPatientId() { return patientId; }
+    public void setPatientId(int patientId) { this.patientId = patientId; }
+
+    public LocalDate getVisitDate() { return visitDate; }
+    public void setVisitDate(LocalDate visitDate) { this.visitDate = visitDate; }
+
+    public String getDiagnosis() { return diagnosis; }
+    public void setDiagnosis(String diagnosis) { this.diagnosis = diagnosis; }
+
+    public String getTreatment() { return treatment; }
+    public void setTreatment(String treatment) { this.treatment = treatment; }
+
+    public String getDoctor() { return doctor; }
+    public void setDoctor(String doctor) { this.doctor = doctor; }
+
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
+
+    @Override
+    public String toString() {
+        return "Record#" + id + " | PatientID: " + patientId + " | " + visitDate + " | Doctor: " + doctor + " | Dx: " + diagnosis;
+    }
+}
+
+package database;
+
+import model.Patient;
+import model.MedicalRecord;
+
+import java.sql.*;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+public class DBConnection {
+    private static Connection conn = null;
+
+    // Update these with your DB credentials
+    private static final String URL = "jdbc:mysql://localhost:3306/medicaldb?useSSL=false&serverTimezone=UTC";
+    private static final String USER = "root";
+    private static final String PASS = ""; // set your password
+
+    public static Connection getConnection() throws SQLException, ClassNotFoundException {
+        if (conn == null || conn.isClosed()) {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            conn = DriverManager.getConnection(URL, USER, PASS);
+        }
+        return conn;
+    }
+
+    // Patient CRUD
+    public static int addPatient(Patient p) {
+        String sql = "INSERT INTO patients (name, age, gender, phone, email) VALUES (?, ?, ?, ?, ?)";
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, p.getName());
+            ps.setInt(2, p.getAge());
+            ps.setString(3, p.getGender());
+            ps.setString(4, p.getPhone());
+            ps.setString(5, p.getEmail());
+            int affected = ps.executeUpdate();
+            if (affected == 0) return -1;
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) return rs.getInt(1);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return -1;
+    }
+
+    public static Patient getPatientById(int id) {
+        String sql = "SELECT * FROM patients WHERE id = ?";
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Patient p = new Patient();
+                    p.setId(rs.getInt("id"));
+                    p.setName(rs.getString("name"));
+                    p.setAge(rs.getInt("age"));
+                    p.setGender(rs.getString("gender"));
+                    p.setPhone(rs.getString("phone"));
+                    p.setEmail(rs.getString("email"));
+                    return p;
+                }
+            }
+        } catch (Exception e) { e.printStackTrace(); }
+        return null;
+    }
+
+    public static List<Patient> getAllPatients() {
+        List<Patient> list = new ArrayList<>();
+        String sql = "SELECT * FROM patients ORDER BY id";
+        try (Connection c = getConnection(); Statement st = c.createStatement(); ResultSet rs = st.executeQuery(sql)) {
+            while (rs.next()) {
+                Patient p = new Patient();
+                p.setId(rs.getInt("id"));
+                p.setName(rs.getString("name"));
+                p.setAge(rs.getInt("age"));
+                p.setGender(rs.getString("gender"));
+                p.setPhone(rs.getString("phone"));
+                p.setEmail(rs.getString("email"));
+                list.add(p);
+            }
+        } catch (Exception e) { e.printStackTrace(); }
+        return list;
+    }
+
+    public static boolean updatePatient(Patient p) {
+        String sql = "UPDATE patients SET name=?, age=?, gender=?, phone=?, email=? WHERE id=?";
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, p.getName());
+            ps.setInt(2, p.getAge());
+            ps.setString(3, p.getGender());
+            ps.setString(4, p.getPhone());
+            ps.setString(5, p.getEmail());
+            ps.setInt(6, p.getId());
+            return ps.executeUpdate() > 0;
+        } catch (Exception e) { e.printStackTrace(); }
+        return false;
+    }
+
+    public static boolean deletePatient(int id) {
+        String sql = "DELETE FROM patients WHERE id = ?";
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
+        } catch (Exception e) { e.printStackTrace(); }
+        return false;
+    }
+
+    // MedicalRecord CRUD
+    public static int addMedicalRecord(MedicalRecord r) {
+        String sql = "INSERT INTO medical_records (patient_id, visit_date, diagnosis, treatment, doctor, notes) VALUES (?, ?, ?, ?, ?, ?)";
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, r.getPatientId());
+            ps.setDate(2, Date.valueOf(r.getVisitDate()));
+            ps.setString(3, r.getDiagnosis());
+            ps.setString(4, r.getTreatment());
+            ps.setString(5, r.getDoctor());
+            ps.setString(6, r.getNotes());
+            int affected = ps.executeUpdate();
+            if (affected == 0) return -1;
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) return rs.getInt(1);
+            }
+        } catch (Exception e) { e.printStackTrace(); }
+        return -1;
+    }
+
+    public static List<MedicalRecord> getRecordsByPatientId(int patientId) {
+        List<MedicalRecord> list = new ArrayList<>();
+        String sql = "SELECT * FROM medical_records WHERE patient_id = ? ORDER BY visit_date DESC";
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setInt(1, patientId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    MedicalRecord r = new MedicalRecord();
+                    r.setId(rs.getInt("id"));
+                    r.setPatientId(rs.getInt("patient_id"));
+                    r.setVisitDate(rs.getDate("visit_date").toLocalDate());
+                    r.setDiagnosis(rs.getString("diagnosis"));
+                    r.setTreatment(rs.getString("treatment"));
+                    r.setDoctor(rs.getString("doctor"));
+                    r.setNotes(rs.getString("notes"));
+                    list.add(r);
+                }
+            }
+        } catch (Exception e) { e.printStackTrace(); }
+        return list;
+    }
+
+    public static boolean deleteRecord(int id) {
+        String sql = "DELETE FROM medical_records WHERE id = ?";
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
+        } catch (Exception e) { e.printStackTrace(); }
+        return false;
+    }
+}
+
+package server;
+
+import database.DBConnection;
+import model.Patient;
+import model.MedicalRecord;
+
+import java.io.*;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.time.LocalDate;
+import java.util.List;
+
+public class MedicalServer {
+
+    public static final int PORT = 6060;
+
+    public static void main(String[] args) {
+        System.out.println("Starting Medical Records Server on port " + PORT);
+        try (ServerSocket ss = new ServerSocket(PORT)) {
+            while (true) {
+                Socket s = ss.accept();
+                System.out.println("Client connected: " + s.getRemoteSocketAddress());
+                new ClientHandler(s).start();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+class ClientHandler extends Thread {
+    private Socket socket;
+
+    ClientHandler(Socket s) { this.socket = s; }
+
+    @Override
+    public void run() {
+        try (ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+             ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
+
+            Object obj;
+            while ((obj = in.readObject()) != null) {
+                if (!(obj instanceof String)) break;
+                String cmd = (String) obj;
+                switch (cmd) {
+                    case "ADD_PATIENT": {
+                        Patient p = (Patient) in.readObject();
+                        int id = DBConnection.addPatient(p);
+                        out.writeObject(id); // returns generated id or -1
+                        out.flush();
+                        break;
+                    }
+                    case "GET_ALL_PATIENTS": {
+                        List<Patient> patients = DBConnection.getAllPatients();
+                        out.writeObject(patients);
+                        out.flush();
+                        break;
+                    }
+                    case "GET_PATIENT": {
+                        int id = (Integer) in.readObject();
+                        Patient p = DBConnection.getPatientById(id);
+                        out.writeObject(p);
+                        out.flush();
+                        break;
+                    }
+                    case "ADD_RECORD": {
+                        MedicalRecord r = (MedicalRecord) in.readObject();
+                        int id = DBConnection.addMedicalRecord(r);
+                        out.writeObject(id);
+                        out.flush();
+                        break;
+                    }
+                    case "GET_RECORDS": {
+                        int patientId = (Integer) in.readObject();
+                        List<MedicalRecord> records = DBConnection.getRecordsByPatientId(patientId);
+                        out.writeObject(records);
+                        out.flush();
+                        break;
+                    }
+                    case "DELETE_PATIENT": {
+                        int id = (Integer) in.readObject();
+                        boolean ok = DBConnection.deletePatient(id);
+                        out.writeObject(ok);
+                        out.flush();
+                        break;
+                    }
+                    case "DELETE_RECORD": {
+                        int id = (Integer) in.readObject();
+                        boolean ok = DBConnection.deleteRecord(id);
+                        out.writeObject(ok);
+                        out.flush();
+                        break;
+                    }
+                    default:
+                        out.writeObject("UNKNOWN_COMMAND");
+                        out.flush();
+                        break;
+                }
+            }
+        } catch (EOFException eof) {
+            // client closed
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            try { socket.close(); } catch (Exception ignored) {}
+        }
+    }
+}
+
+package client;
+
+import model.Patient;
+import model.MedicalRecord;
+
+import java.io.*;
+import java.net.Socket;
+import java.time.LocalDate;
+import java.util.List;
+
+public class MedicalClient implements Closeable {
+    private Socket socket;
+    private ObjectOutputStream out;
+    private ObjectInputStream in;
+
+    public void connect(String host, int port) throws IOException {
+        socket = new Socket(host, port);
+        out = new ObjectOutputStream(socket.getOutputStream());
+        in = new ObjectInputStream(socket.getInputStream());
+    }
+
+    public int addPatient(Patient p) throws Exception {
+        out.writeObject("ADD_PATIENT");
+        out.writeObject(p);
+        out.flush();
+        return (Integer) in.readObject();
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<Patient> getAllPatients() throws Exception {
+        out.writeObject("GET_ALL_PATIENTS");
+        out.flush();
+        return (List<Patient>) in.readObject();
+    }
+
+    public Patient getPatient(int id) throws Exception {
+        out.writeObject("GET_PATIENT");
+        out.writeObject(id);
+        out.flush();
+        return (Patient) in.readObject();
+    }
+
+    public int addRecord(MedicalRecord r) throws Exception {
+        out.writeObject("ADD_RECORD");
+        out.writeObject(r);
+        out.flush();
+        return (Integer) in.readObject();
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<MedicalRecord> getRecords(int patientId) throws Exception {
+        out.writeObject("GET_RECORDS");
+        out.writeObject(patientId);
+        out.flush();
+        return (List<MedicalRecord>) in.readObject();
+    }
+
+    public boolean deletePatient(int id) throws Exception {
+        out.writeObject("DELETE_PATIENT");
+        out.writeObject(id);
+        out.flush();
+        return (Boolean) in.readObject();
+    }
+
+    public boolean deleteRecord(int id) throws Exception {
+        out.writeObject("DELETE_RECORD");
+        out.writeObject(id);
+        out.flush();
+        return (Boolean) in.readObject();
+    }
+
+    @Override
+    public void close() throws IOException {
+        try { if (out != null) out.close(); } catch (Exception ignored) {}
+        try { if (in != null) in.close(); } catch (Exception ignored) {}
+        try { if (socket != null) socket.close(); } catch (Exception ignored) {}
+    }
+
+    // small demo main for quick console testing
+    public static void main(String[] args) throws Exception {
+        MedicalClient c = new MedicalClient();
+        c.connect("localhost", 6060);
+        Patient p = new Patient("Demo Patient", 30, "Male", "9876543210", "demo@example.com");
+        int id = c.addPatient(p);
+        System.out.println("Created patient id: " + id);
+        c.close();
+    }
+}
+
+package ui;
+
+import client.MedicalClient;
+import model.MedicalRecord;
+import model.Patient;
+
+import javax.swing.*;
+import java.awt.*;
+import java.time.LocalDate;
+import java.util.List;
+
+public class MedicalUI extends JFrame {
+
+    private MedicalClient client;
+    private JTextArea output;
+    private JTextField nameField, ageField, genderField, phoneField, emailField;
+    private JTextField patientIdField, visitDateField, doctorField;
+    private JTextArea diagnosisArea, treatmentArea, notesArea;
+
+    public MedicalUI() {
+        setTitle("Medical Records Management");
+        setSize(900, 600);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        // Top: connection info + output
+        JPanel top = new JPanel(new BorderLayout());
+        output = new JTextArea(8, 80);
+        output.setEditable(false);
+        top.add(new JScrollPane(output), BorderLayout.CENTER);
+
+        JPanel connPanel = new JPanel();
+        JButton connectBtn = new JButton("Connect to Server");
+        connPanel.add(connectBtn);
+        top.add(connPanel, BorderLayout.NORTH);
+
+        add(top, BorderLayout.NORTH);
+
+        // left: patient form
+        JPanel left = new JPanel(new GridLayout(12, 1, 4, 4));
+        left.setBorder(BorderFactory.createTitledBorder("Patient"));
+
+        nameField = new JTextField();
+        ageField = new JTextField();
+        genderField = new JTextField();
+        phoneField = new JTextField();
+        emailField = new JTextField();
+        JButton addPatientBtn = new JButton("Add Patient");
+        JButton viewPatientsBtn = new JButton("View All Patients");
+
+        left.add(new JLabel("Name:")); left.add(nameField);
+        left.add(new JLabel("Age:")); left.add(ageField);
+        left.add(new JLabel("Gender:")); left.add(genderField);
+        left.add(new JLabel("Phone:")); left.add(phoneField);
+        left.add(new JLabel("Email:")); left.add(emailField);
+        left.add(addPatientBtn); left.add(viewPatientsBtn);
+
+        // right: medical record form
+        JPanel right = new JPanel(new GridLayout(14, 1, 4, 4));
+        right.setBorder(BorderFactory.createTitledBorder("Medical Record"));
+
+        patientIdField = new JTextField();
+        visitDateField = new JTextField(LocalDate.now().toString()); // YYYY-MM-DD
+        doctorField = new JTextField();
+        diagnosisArea = new JTextArea(3, 20);
+        treatmentArea = new JTextArea(3, 20);
+        notesArea = new JTextArea(2, 20);
+
+        JButton addRecordBtn = new JButton("Add Record");
+        JButton viewRecordsBtn = new JButton("View Records");
+
+        right.add(new JLabel("Patient ID:")); right.add(patientIdField);
+        right.add(new JLabel("Visit Date (YYYY-MM-DD):")); right.add(visitDateField);
+        right.add(new JLabel("Doctor:")); right.add(doctorField);
+        right.add(new JLabel("Diagnosis:")); right.add(new JScrollPane(diagnosisArea));
+        right.add(new JLabel("Treatment:")); right.add(new JScrollPane(treatmentArea));
+        right.add(new JLabel("Notes:")); right.add(new JScrollPane(notesArea));
+        right.add(addRecordBtn); right.add(viewRecordsBtn);
+
+        JPanel center = new JPanel(new GridLayout(1,2));
+        center.add(left); center.add(right);
+        add(center, BorderLayout.CENTER);
+
+        // actions
+        connectBtn.addActionListener(e -> {
+            try {
+                client = new MedicalClient();
+                client.connect("localhost", 6060);
+                output.append("Connected to server.\n");
+            } catch (Exception ex) {
+                output.append("Failed to connect: " + ex.getMessage() + "\n");
+            }
+        });
+
+        addPatientBtn.addActionListener(e -> {
+            try {
+                if (client == null) { output.append("Not connected.\n"); return; }
+                String name = nameField.getText().trim();
+                int age = Integer.parseInt(ageField.getText().trim());
+                String gender = genderField.getText().trim();
+                String phone = phoneField.getText().trim();
+                String email = emailField.getText().trim();
+                Patient p = new Patient(name, age, gender, phone, email);
+                int id = client.addPatient(p);
+                output.append("Added patient with id: " + id + "\n");
+            } catch (Exception ex) {
+                output.append("Error adding patient: " + ex.getMessage() + "\n");
+            }
+        });
+
+        viewPatientsBtn.addActionListener(e -> {
+            try {
+                if (client == null) { output.append("Not connected.\n"); return; }
+                List<Patient> list = client.getAllPatients();
+                output.append("---- Patients ----\n");
+                for (Patient p : list) output.append(p.toString() + "\n");
+            } catch (Exception ex) {
+                output.append("Error fetching patients: " + ex.getMessage() + "\n");
+            }
+        });
+
+        addRecordBtn.addActionListener(e -> {
+            try {
+                if (client == null) { output.append("Not connected.\n"); return; }
+                int pid = Integer.parseInt(patientIdField.getText().trim());
+                LocalDate vd = LocalDate.parse(visitDateField.getText().trim());
+                String doctor = doctorField.getText().trim();
+                String dx = diagnosisArea.getText().trim();
+                String treatment = treatmentArea.getText().trim();
+                String notes = notesArea.getText().trim();
+                MedicalRecord r = new MedicalRecord(pid, vd, dx, treatment, doctor, notes);
+                int rid = client.addRecord(r);
+                output.append("Added record id: " + rid + "\n");
+            } catch (Exception ex) {
+                output.append("Error adding record: " + ex.getMessage() + "\n");
+            }
+        });
+
+        viewRecordsBtn.addActionListener(e -> {
+            try {
+                if (client == null) { output.append("Not connected.\n"); return; }
+                int pid = Integer.parseInt(patientIdField.getText().trim());
+                List<MedicalRecord> records = client.getRecords(pid);
+                output.append("---- Records for patient " + pid + " ----\n");
+                for (MedicalRecord r : records) {
+                    output.append(r.toString() + "\nDiagnosis: " + r.getDiagnosis() + "\nTreatment: " + r.getTreatment() + "\nNotes: " + r.getNotes() + "\n---\n");
+                }
+            } catch (Exception ex) {
+                output.append("Error fetching records: " + ex.getMessage() + "\n");
+            }
+        });
+
+        setVisible(true);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(MedicalUI::new);
+    }
+}
